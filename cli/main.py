@@ -33,7 +33,7 @@ from cli.models import AnalystType
 from cli.utils import *
 from cli.announcements import fetch_announcements, display_announcements
 from cli.stats_handler import StatsCallbackHandler
-from cli.report_frontmatter import build_front_matter
+from cli.report_json import build_report_json
 
 console = Console()
 
@@ -780,8 +780,13 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: 
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
-    # Write consolidated report. The close price as of the report date is
-    # fetched best-effort: a missing/failed price must never block the report.
+    # Write consolidated markdown report.
+    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
+
+    # Write machine-readable JSON report alongside the markdown.
+    # The close price as of the report date is fetched best-effort: a
+    # missing/failed price must never block the report.
     report_close = None
     try:
         from tradingagents.dataflows.y_finance import get_latest_close
@@ -792,9 +797,12 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: 
     except Exception:
         report_close = None
 
-    front_matter = build_front_matter(final_state, ticker, report_date, report_close=report_close)
-    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    (save_path / "complete_report.md").write_text(front_matter + header + "\n\n".join(sections), encoding="utf-8")
+    import json
+    report_data = build_report_json(final_state, ticker, report_date, report_close=report_close)
+    (save_path / "complete_report.json").write_text(
+        json.dumps(report_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
     return save_path / "complete_report.md"
 
 
