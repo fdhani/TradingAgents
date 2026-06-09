@@ -106,13 +106,15 @@ def build_front_matter(
     final_state: dict,
     ticker: str,
     report_date: Optional[str] = None,
+    report_close: Optional[Union[int, float]] = None,
 ) -> str:
     """Build the ``---\\n...\\n---\\n\\n`` YAML front-matter block for a report.
 
     Only keys with a value are emitted; missing data is omitted rather than
-    invented.  ``report_close`` and ``tranches`` are intentionally not produced
-    (no close-price plumbing and no structured staged-entry data exist today);
-    ``position_sizing`` is used in place of ``tranches``.
+    invented.  ``report_close`` is the close price as of ``report_date`` when
+    the caller supplies it (see ``get_latest_close``); it is omitted when not
+    provided.  ``tranches`` is intentionally not produced (no structured
+    staged-entry data exists today); ``position_sizing`` is used in its place.
     """
     trader_md = final_state.get("trader_investment_plan") or ""
     pm_md = final_state.get("final_trade_decision") or ""
@@ -163,7 +165,7 @@ def build_front_matter(
     add_str("company", company)
     add_str("report_date", report_date)
     add_str("generated_at", datetime.datetime.now().isoformat(timespec="seconds"))
-    # report_close intentionally omitted: not available in agent state.
+    add_num("report_close", report_close)
     add_str("rating", rating)
     add_str("action", action)
     add_num("entry_price", entry_price)

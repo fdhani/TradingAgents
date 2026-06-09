@@ -53,6 +53,29 @@ def get_YFin_data_online(
 
     return header + csv_string
 
+def get_latest_close(
+    symbol: Annotated[str, "ticker symbol of the company"],
+    curr_date: Annotated[str, "as-of date in yyyy-mm-dd format"],
+) -> float | None:
+    """Return the most recent close price on or before ``curr_date``.
+
+    Reuses the look-ahead-safe :func:`load_ohlcv` loader (rows after
+    ``curr_date`` are filtered out), so the value is the closing price the
+    report would have known about at generation time -- not a future price.
+    Returns ``None`` when no priced rows are available rather than raising,
+    so report generation never fails on a missing/odd price.
+    """
+    try:
+        data = load_ohlcv(symbol, curr_date)
+    except NoMarketDataError:
+        return None
+    if data.empty or "Close" not in data.columns:
+        return None
+    close = data["Close"].iloc[-1]
+    if pd.isna(close):
+        return None
+    return round(float(close), 2)
+
 def get_stock_stats_indicators_window(
     symbol: Annotated[str, "ticker symbol of the company"],
     indicator: Annotated[str, "technical indicator to get the analysis and report of"],
