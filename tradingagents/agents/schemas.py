@@ -106,6 +106,23 @@ def render_research_plan(plan: ResearchPlan) -> str:
 # ---------------------------------------------------------------------------
 
 
+class Tranche(BaseModel):
+    """A single staged-entry level within a phased buy plan."""
+
+    price: Optional[float] = Field(
+        default=None,
+        description="Entry price level for this tranche.",
+    )
+    weight: Optional[str] = Field(
+        default=None,
+        description="Allocation for this tranche, e.g. '40%' or '1/3'.",
+    )
+    note: Optional[str] = Field(
+        default=None,
+        description="One-line rationale for this tranche.",
+    )
+
+
 class TraderProposal(BaseModel):
     """Structured transaction proposal produced by the Trader.
 
@@ -136,6 +153,15 @@ class TraderProposal(BaseModel):
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
     )
+    tranches: Optional[list[Tranche]] = Field(
+        default=None,
+        description=(
+            "Structured staged-entry levels. When recommending a phased entry "
+            "(Buy action), express each tranche as a separate item with a specific "
+            "price level, an allocation percentage or fraction of the target "
+            "position, and a one-line rationale. Omit for Hold or Sell actions."
+        ),
+    )
 
 
 def render_trader_proposal(proposal: TraderProposal) -> str:
@@ -156,6 +182,13 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Stop Loss**: {proposal.stop_loss}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
+    if proposal.tranches:
+        parts.extend(["", "**Tranches**:", "", "| Price | Allocation | Note |", "| --- | --- | --- |"])
+        for t in proposal.tranches:
+            price = t.price if t.price is not None else ""
+            weight = t.weight or ""
+            note = t.note or ""
+            parts.append(f"| {price} | {weight} | {note} |")
     parts.extend([
         "",
         f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
