@@ -31,7 +31,11 @@ def create_trader(llm):
                 "content": (
                     "You are a trading agent analyzing market data to make investment decisions. "
                     "Based on your analysis, provide a specific recommendation to buy, sell, or hold. "
-                    "Anchor your reasoning in the analysts' reports and the research plan."
+                    "Anchor your reasoning in the analysts' reports and the research plan. "
+                    "If recommending a phased entry (Buy action), express each tranche as a separate "
+                    "item with a specific price level, an allocation percentage or fraction of the "
+                    "target position, and a one-line rationale. Do not describe staged entries as "
+                    "free-form text."
                     + get_language_instruction()
                 ),
             },

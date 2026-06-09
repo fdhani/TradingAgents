@@ -91,6 +91,44 @@ def _final_proposal(markdown: str) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
+_TRANCHE_ROW_RE = re.compile(
+    r"^\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|",
+    re.MULTILINE,
+)
+
+
+def _parse_tranches(markdown: str) -> Optional[list[dict]]:
+    """Extract tranche rows from the **Tranches**: markdown table, or None."""
+    if not markdown:
+        return None
+    m = re.search(
+        r"\*{0,2}Tranches\*{0,2}\s*:\s*\n(.*?)(?=\n\s*(?:FINAL|\*{0,2}[A-Z])|\Z)",
+        markdown,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return None
+    block = m.group(1)
+    rows = []
+    for row in _TRANCHE_ROW_RE.finditer(block):
+        price_str = row.group(1).strip()
+        weight = row.group(2).strip()
+        note = row.group(3).strip()
+        if price_str.lower() in ("price", "---", "") or re.match(r"^[-\s]+$", price_str):
+            continue
+        price = _num(price_str)
+        entry: dict = {}
+        if price is not None:
+            entry["price"] = price
+        if weight:
+            entry["weight"] = weight
+        if note:
+            entry["note"] = note
+        if entry:
+            rows.append(entry)
+    return rows or None
+
+
 def _yaml_str(value: str) -> str:
     """Emit a double-quoted YAML scalar, escaping backslashes and quotes."""
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
@@ -112,9 +150,8 @@ def build_front_matter(
 
     Only keys with a value are emitted; missing data is omitted rather than
     invented.  ``report_close`` is the close price as of ``report_date`` when
-    the caller supplies it (see ``get_latest_close``); it is omitted when not
-    provided.  ``tranches`` is intentionally not produced (no structured
-    staged-entry data exists today); ``position_sizing`` is used in its place.
+    the caller supplies it (see ``get_latest_close``).  ``tranches`` is parsed
+    from the trader markdown table when present; omitted otherwise.
     """
     trader_md = final_state.get("trader_investment_plan") or ""
     pm_md = final_state.get("final_trade_decision") or ""
@@ -171,6 +208,19 @@ def build_front_matter(
     add_num("entry_price", entry_price)
     add_num("stop_loss", stop_loss)
     add_str("position_sizing", position_sizing)
+    tranches = _parse_tranches(trader_md)
+    if tranches and final_proposal == "BUY":
+        lines.append("tranches:")
+        for t in tranches:
+            prefix = "  - "
+            for k, v in t.items():
+                if k == "price":
+                    lines.append(f"{prefix}price: {v}")
+                elif k == "weight":
+                    lines.append(f"{prefix}weight: {_yaml_str(str(v))}")
+                elif k == "note":
+                    lines.append(f"{prefix}note: {_yaml_str(str(v))}")
+                prefix = "    "
     add_num("price_target", price_target)
     add_str("time_horizon", time_horizon)
     add_block("summary", summary)
