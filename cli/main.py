@@ -780,8 +780,19 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: 
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
-    # Write consolidated report
-    front_matter = build_front_matter(final_state, ticker, report_date)
+    # Write consolidated report. The close price as of the report date is
+    # fetched best-effort: a missing/failed price must never block the report.
+    report_close = None
+    try:
+        from tradingagents.dataflows.y_finance import get_latest_close
+
+        price_date = report_date or final_state.get("trade_date")
+        if price_date:
+            report_close = get_latest_close(ticker, price_date)
+    except Exception:
+        report_close = None
+
+    front_matter = build_front_matter(final_state, ticker, report_date, report_close=report_close)
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     (save_path / "complete_report.md").write_text(front_matter + header + "\n\n".join(sections), encoding="utf-8")
     return save_path / "complete_report.md"

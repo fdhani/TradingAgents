@@ -93,11 +93,14 @@ class TestBuildFrontMatter:
             "trade_date": "2024-05-10",
         }
 
-        block = build_front_matter(final_state, "nvda", report_date="2024-05-10")
+        block = build_front_matter(
+            final_state, "nvda", report_date="2024-05-10", report_close=185.25
+        )
         data = _front_matter_dict(block)
 
         assert data["ticker"] == "NVDA"
         assert data["report_date"] == "2024-05-10"
+        assert data["report_close"] == 185.25
         assert data["rating"] == "Buy"
         assert data["action"] == "Buy"
         assert data["entry_price"] == 189.5
@@ -108,10 +111,32 @@ class TestBuildFrontMatter:
         assert "pullback" in data["summary"]
         assert "data-center demand" in data["thesis"]
         assert data["final_proposal"] == "BUY"
-        # generated_at present; report_close never emitted; tranches never emitted.
+        # generated_at present; tranches never emitted.
         assert "generated_at" in data
-        assert "report_close" not in data
         assert "tranches" not in data
+
+    def test_report_close_omitted_when_not_provided(self):
+        # No report_close passed -> the field is omitted rather than invented.
+        data = _front_matter_dict(
+            build_front_matter(
+                {"final_trade_decision": "Rating: Hold", "company_of_interest": "NVDA"},
+                "NVDA",
+                report_date="2024-05-10",
+            )
+        )
+        assert "report_close" not in data
+
+    def test_report_close_emitted_as_number(self):
+        data = _front_matter_dict(
+            build_front_matter(
+                {"final_trade_decision": "Rating: Hold"},
+                "NVDA",
+                report_date="2024-05-10",
+                report_close=910.0,
+            )
+        )
+        # 910.0 collapses to a plain int, matching the other numeric fields.
+        assert data["report_close"] == 910
 
     def test_block_scalars_used_for_summary_and_thesis(self):
         pm_md = render_pm_decision(
