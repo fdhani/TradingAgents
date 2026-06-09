@@ -40,7 +40,7 @@ def main():
     final_state, decision = ta.propagate(args.ticker, args.date, asset_type=args.asset)
 
     save_path = Path(config["results_dir"]) / args.ticker / args.date / "reports"
-    report_file = save_report_to_disk(final_state, args.ticker, save_path)
+    report_file = save_report_to_disk(final_state, args.ticker, save_path, report_date=args.date)
 
     print(f"Decision: {decision}")
     print(f"Report written to: {report_file}")

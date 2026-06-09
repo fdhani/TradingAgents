@@ -33,6 +33,7 @@ from cli.models import AnalystType
 from cli.utils import *
 from cli.announcements import fetch_announcements, display_announcements
 from cli.stats_handler import StatsCallbackHandler
+from cli.report_frontmatter import build_front_matter
 
 console = Console()
 
@@ -695,7 +696,7 @@ def get_analysis_date():
             )
 
 
-def save_report_to_disk(final_state, ticker: str, save_path: Path):
+def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: str | None = None):
     """Save complete analysis report to disk with organized subfolders."""
     save_path.mkdir(parents=True, exist_ok=True)
     sections = []
@@ -780,8 +781,9 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
     # Write consolidated report
+    front_matter = build_front_matter(final_state, ticker, report_date)
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
+    (save_path / "complete_report.md").write_text(front_matter + header + "\n\n".join(sections), encoding="utf-8")
     return save_path / "complete_report.md"
 
 
@@ -1273,7 +1275,7 @@ def run_analysis(checkpoint: bool = False):
         ).strip()
         save_path = Path(save_path_str)
         try:
-            report_file = save_report_to_disk(final_state, selections["ticker"], save_path)
+            report_file = save_report_to_disk(final_state, selections["ticker"], save_path, report_date=selections["analysis_date"])
             console.print(f"\n[green]✓ Report saved to:[/green] {save_path.resolve()}")
             console.print(f"  [dim]Complete report:[/dim] {report_file.name}")
         except Exception as e:
