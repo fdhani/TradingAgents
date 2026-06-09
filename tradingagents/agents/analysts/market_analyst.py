@@ -52,6 +52,7 @@ Before writing the final report, call get_verified_market_snapshot for this tick
 
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + " IMPORTANT: Respond with the final report only. Do not include any preamble, status updates, or narration of your process (e.g. \"Now let me get the MACD...\", \"Now I have all the data, let me synthesize\"); begin your response directly with the report content."
             + get_language_instruction()
         )
 
