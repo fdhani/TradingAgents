@@ -18,6 +18,8 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
+    "TRADINGAGENTS_GCS_BUCKET":           "gcs_output_bucket",
+    "TRADINGAGENTS_GCS_PREFIX":           "gcs_output_prefix",
 }
 
 
@@ -51,6 +53,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
+    # GCS output upload (Cloud Run). Set gcs_output_bucket to upload reports to
+    # gs://{bucket}/{prefix}/{ticker}/{date}/reports/ after each run.
+    # Authentication uses ADC — no key file needed on Cloud Run.
+    "gcs_output_bucket": os.getenv("TRADINGAGENTS_GCS_BUCKET") or None,
+    "gcs_output_prefix": os.getenv("TRADINGAGENTS_GCS_PREFIX", "tradingagents"),
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.5",
