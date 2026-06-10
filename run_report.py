@@ -33,9 +33,19 @@ def _log(msg: str) -> None:
 
 
 def _validate_gcs(bucket_name: str) -> None:
-    """Check that the GCS bucket exists and is accessible. Exits on failure."""
+    """Best-effort pre-flight check that the GCS bucket is usable.
+
+    Note: ``bucket.exists()`` issues a ``storage.buckets.get`` request, which
+    requires *read* access to bucket metadata (e.g. ``roles/storage.objectViewer``
+    or ``roles/storage.legacyBucketReader``). The write-only
+    ``roles/storage.objectCreator`` role — which is all that uploads actually
+    need — cannot read bucket metadata and will raise ``Forbidden`` here. That
+    is expected and not fatal: we proceed and let the real upload surface any
+    genuine permission problem. Only a confirmed "bucket does not exist" result
+    aborts early.
+    """
     from google.cloud import storage
-    from google.cloud.exceptions import NotFound, Forbidden
+    from google.cloud.exceptions import Forbidden
 
     try:
         client = storage.Client()
@@ -45,12 +55,13 @@ def _validate_gcs(bucket_name: str) -> None:
             sys.exit(1)
         _log(f"[run_report] GCS bucket '{bucket_name}' validated OK.")
     except Forbidden:
-        _log(f"[run_report] ERROR: Permission denied accessing GCS bucket '{bucket_name}'. "
-             "Ensure the service account has roles/storage.objectCreator.")
-        sys.exit(1)
+        # objectCreator-only service accounts legitimately can't read bucket
+        # metadata. Don't abort — the upload below is the real test.
+        _log(f"[run_report] NOTE: Cannot read metadata for bucket '{bucket_name}' "
+             "(expected with a write-only objectCreator role). Proceeding with upload.")
     except Exception as e:
-        _log(f"[run_report] ERROR: Could not validate GCS bucket '{bucket_name}': {e}")
-        sys.exit(1)
+        _log(f"[run_report] WARNING: Could not pre-validate GCS bucket '{bucket_name}': {e}. "
+             "Proceeding with upload.")
 
 
 def main():
@@ -86,10 +97,21 @@ def main():
     if not gcs_bucket:
         _log("[run_report] TRADINGAGENTS_GCS_BUCKET not set — skipping GCS upload.")
     else:
+        from google.cloud.exceptions import Forbidden, NotFound
+
         _validate_gcs(gcs_bucket)
         _log(f"[run_report] Uploading reports to GCS bucket '{gcs_bucket}'...")
         gcs_prefix = f"{config.get('gcs_output_prefix', 'tradingagents')}/{args.ticker}/{args.date}/reports"
-        uris = upload_directory_to_gcs(save_path, gcs_bucket, gcs_prefix)
+        try:
+            uris = upload_directory_to_gcs(save_path, gcs_bucket, gcs_prefix)
+        except Forbidden:
+            _log(f"[run_report] ERROR: Permission denied uploading to GCS bucket "
+                 f"'{gcs_bucket}'. Grant the service account roles/storage.objectCreator "
+                 "on this bucket.")
+            sys.exit(1)
+        except NotFound:
+            _log(f"[run_report] ERROR: GCS bucket '{gcs_bucket}' does not exist.")
+            sys.exit(1)
         for uri in uris:
             print(f"Uploaded: {uri}")
         if uris:
