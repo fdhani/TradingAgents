@@ -1,13 +1,13 @@
-"""Build the YAML front-matter block prepended to the consolidated report.
+"""Build the summary sidecar JSON written alongside the consolidated report.
 
-The front-matter exposes a run's key decision data (rating, trader action,
+The summary exposes a run's key decision data (rating, trader action,
 entry/stop prices, price target, summary, thesis, etc.) as machine-readable
-metadata at the top of ``complete_report.md``.
+metadata in a standalone ``<ticker>_<date>_summary.json`` file.
 
 Values are parsed out of the deterministic markdown the decision agents already
 render -- see ``render_trader_proposal`` and ``render_pm_decision`` in
 :mod:`tradingagents.agents.schemas`.  Any value we cannot find is simply
-omitted: the block never invents data.  This keeps the change localised to the
+omitted: the dict never invents data.  This keeps the change localised to the
 report writer (no agent/state changes) and works uniformly whether an agent
 used structured output or the free-text fallback.
 """
@@ -29,10 +29,7 @@ _FINAL_PROPOSAL_RE = re.compile(
 
 
 def _field(markdown: str, label: str) -> Optional[str]:
-    """Return the single-line value after a ``**Label**:`` marker, or ``None``.
-
-    Tolerates the optional markdown bold wrappers around the label.
-    """
+    """Return the single-line value after a ``**Label**:`` marker, or ``None``."""
     if not markdown:
         return None
     pattern = re.compile(
@@ -47,12 +44,7 @@ def _field(markdown: str, label: str) -> Optional[str]:
 
 
 def _block(markdown: str, label: str) -> Optional[str]:
-    """Return the (possibly multi-line) value after a ``**Label**:`` marker.
-
-    Captures everything up to the next ``**Something**:`` line marker or the end
-    of the text, then collapses internal whitespace to a single line so it sits
-    cleanly in a folded YAML block scalar.
-    """
+    """Return the (possibly multi-line) value after a ``**Label**:`` marker."""
     if not markdown:
         return None
     pattern = re.compile(
@@ -68,11 +60,7 @@ def _block(markdown: str, label: str) -> Optional[str]:
 
 
 def _num(value: Optional[str]) -> Optional[Union[int, float]]:
-    """Coerce a string to a plain number.
-
-    Strips ``$`` and thousands separators, and takes the primary (first) number
-    of a range such as ``"100-120"``.  Returns ``None`` when no number is found.
-    """
+    """Coerce a string to a plain number, stripping ``$`` and thousands separators."""
     if value is None:
         return None
     cleaned = value.replace("$", "").replace(",", "").strip()
@@ -129,26 +117,15 @@ def _parse_tranches(markdown: str) -> Optional[list[dict]]:
     return rows or None
 
 
-def _yaml_str(value: str) -> str:
-    """Emit a double-quoted YAML scalar, escaping backslashes and quotes."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
-def _yaml_block(value: str) -> str:
-    """Emit a folded, strip-chomped block scalar (``>-``) with 2-space indent."""
-    return ">-\n  " + " ".join(value.split())
-
-
-def build_front_matter(
+def build_summary(
     final_state: dict,
     ticker: str,
     report_date: Optional[str] = None,
     report_close: Optional[Union[int, float]] = None,
-) -> str:
-    """Build the ``---\\n...\\n---\\n\\n`` YAML front-matter block for a report.
+) -> dict:
+    """Build the summary dict for the sidecar JSON file.
 
-    Only keys with a value are emitted; missing data is omitted rather than
+    Only keys with a value are included; missing data is omitted rather than
     invented.  ``report_close`` is the close price as of ``report_date`` when
     the caller supplies it (see ``get_latest_close``).  ``tranches`` is parsed
     from the trader markdown table when present; omitted otherwise.
@@ -158,7 +135,6 @@ def build_front_matter(
 
     ticker_up = (ticker or "").upper()
 
-    # company: omit when it is just the ticker (no friendly name is available).
     company = final_state.get("company_of_interest")
     if company and company.strip().upper() == ticker_up:
         company = None
@@ -177,55 +153,38 @@ def build_front_matter(
 
     price_target = _num(_field(pm_md, "Price Target"))
     time_horizon = _field(pm_md, "Time Horizon")
-    summary = _block(pm_md, "Executive Summary")
+    executive_summary = _block(pm_md, "Executive Summary")
     thesis = _block(pm_md, "Investment Thesis")
 
     final_proposal = _final_proposal(trader_md)
     if not final_proposal and action:
         final_proposal = action.upper()
 
-    lines = ["---"]
-
-    def add_str(key: str, value) -> None:
-        if value not in (None, ""):
-            lines.append(f"{key}: {_yaml_str(str(value))}")
-
-    def add_num(key: str, value) -> None:
-        if value is not None:
-            lines.append(f"{key}: {value}")
-
-    def add_block(key: str, value) -> None:
-        if value:
-            lines.append(f"{key}: {_yaml_block(value)}")
-
-    add_str("ticker", ticker_up)
-    add_str("company", company)
-    add_str("report_date", report_date)
-    add_str("generated_at", datetime.datetime.now().isoformat(timespec="seconds"))
-    add_num("report_close", report_close)
-    add_str("rating", rating)
-    add_str("action", action)
-    add_num("entry_price", entry_price)
-    add_num("stop_loss", stop_loss)
-    add_str("position_sizing", position_sizing)
     tranches = _parse_tranches(trader_md)
-    if tranches and final_proposal == "BUY":
-        lines.append("tranches:")
-        for t in tranches:
-            prefix = "  - "
-            for k, v in t.items():
-                if k == "price":
-                    lines.append(f"{prefix}price: {v}")
-                elif k == "weight":
-                    lines.append(f"{prefix}weight: {_yaml_str(str(v))}")
-                elif k == "note":
-                    lines.append(f"{prefix}note: {_yaml_str(str(v))}")
-                prefix = "    "
-    add_num("price_target", price_target)
-    add_str("time_horizon", time_horizon)
-    add_block("summary", summary)
-    add_block("thesis", thesis)
-    add_str("final_proposal", final_proposal)
-    lines.append("---")
+    if tranches and final_proposal != "BUY":
+        tranches = None
 
-    return "\n".join(lines) + "\n\n"
+    data: dict = {}
+
+    def set_if(key: str, value) -> None:
+        if value not in (None, ""):
+            data[key] = value
+
+    set_if("ticker", ticker_up)
+    set_if("company", company)
+    set_if("report_date", report_date)
+    data["generated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    set_if("report_close", report_close)
+    set_if("rating", rating)
+    set_if("action", action)
+    set_if("entry_price", entry_price)
+    set_if("stop_loss", stop_loss)
+    set_if("position_sizing", position_sizing)
+    set_if("tranches", tranches)
+    set_if("price_target", price_target)
+    set_if("time_horizon", time_horizon)
+    set_if("summary", executive_summary)
+    set_if("thesis", thesis)
+    set_if("final_proposal", final_proposal)
+
+    return data
