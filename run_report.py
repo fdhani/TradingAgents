@@ -33,16 +33,14 @@ def _log(msg: str) -> None:
 
 
 def _validate_gcs(bucket_name: str) -> None:
-    """Check that the GCS bucket exists and is accessible. Exits on failure."""
+    """Check write access to the GCS bucket by uploading a small probe object."""
     from google.cloud import storage
-    from google.cloud.exceptions import NotFound, Forbidden
+    from google.cloud.exceptions import Forbidden
 
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
-        if not bucket.exists():
-            _log(f"[run_report] ERROR: GCS bucket '{bucket_name}' does not exist.")
-            sys.exit(1)
+        bucket.blob("_tradingagents_probe").upload_from_string(b"")
         _log(f"[run_report] GCS bucket '{bucket_name}' validated OK.")
     except Forbidden:
         _log(f"[run_report] ERROR: Permission denied accessing GCS bucket '{bucket_name}'. "
