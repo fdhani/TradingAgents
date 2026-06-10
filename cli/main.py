@@ -33,7 +33,7 @@ from cli.models import AnalystType
 from cli.utils import *
 from cli.announcements import fetch_announcements, display_announcements
 from cli.stats_handler import StatsCallbackHandler
-from cli.report_json import build_report_json
+from cli.report_json import build_summary
 
 console = Console()
 
@@ -780,30 +780,34 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: 
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
-    # Write consolidated markdown report.
-    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
+    ticker_up = ticker.upper()
+    date_str = report_date or final_state.get("trade_date") or "unknown"
+    base_name = f"{ticker_up}_{date_str}"
 
-    # Write machine-readable JSON report alongside the markdown.
+    # Write consolidated markdown report.
+    header = f"# Trading Analysis Report: {ticker_up}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    (save_path / f"{base_name}_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
+
+    # Write machine-readable summary JSON alongside the markdown.
     # The close price as of the report date is fetched best-effort: a
     # missing/failed price must never block the report.
     report_close = None
     try:
         from tradingagents.dataflows.y_finance import get_latest_close
 
-        price_date = report_date or final_state.get("trade_date")
+        price_date = date_str if date_str != "unknown" else None
         if price_date:
             report_close = get_latest_close(ticker, price_date)
     except Exception:
         report_close = None
 
     import json
-    report_data = build_report_json(final_state, ticker, report_date, report_close=report_close)
-    (save_path / "complete_report.json").write_text(
-        json.dumps(report_data, indent=2, ensure_ascii=False), encoding="utf-8"
+    summary_data = build_summary(final_state, ticker, report_date, report_close=report_close)
+    (save_path / f"{base_name}_summary.json").write_text(
+        json.dumps(summary_data, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
-    return save_path / "complete_report.md"
+    return save_path / f"{base_name}_report.md"
 
 
 def display_complete_report(final_state):

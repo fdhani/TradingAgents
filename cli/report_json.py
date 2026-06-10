@@ -1,9 +1,9 @@
-"""Build the machine-readable JSON report from a completed run's final_state.
+"""Build the machine-readable summary JSON from a completed run's final_state.
 
 Structured data comes directly from the Pydantic objects stored in state
 (``trader_proposal``, ``pm_decision``) — no markdown re-parsing needed.
 When structured output was unavailable (free-text fallback), those keys are
-``None`` and the corresponding fields are omitted from the JSON.
+``None`` and the corresponding fields are omitted from the summary.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ import datetime
 from typing import Any, Optional, Union
 
 
-def build_report_json(
+def build_summary(
     final_state: dict,
     ticker: str,
     report_date: Optional[str] = None,
     report_close: Optional[Union[int, float]] = None,
 ) -> dict:
-    """Return a dict suitable for ``json.dump``.
+    """Return a dict suitable for ``json.dump`` as the run summary.
 
     Only keys with a value are included; missing data is omitted rather than
     invented.
