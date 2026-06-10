@@ -12,6 +12,7 @@ from cli.report_summary import build_summary
 from tradingagents.agents.schemas import (
     PortfolioDecision,
     PortfolioRating,
+    Tranche,
     TraderAction,
     TraderProposal,
     render_pm_decision,
@@ -47,11 +48,20 @@ class TestBuildSummary:
             "trade_date": "2024-05-10",
         }
 
-        data = build_summary(final_state, "nvda", report_date="2024-05-10", report_close=185.25)
+        data = build_summary(
+            final_state,
+            "nvda",
+            report_date="2024-05-10",
+            report_close=185.25,
+            generated_at="2024-05-10 12:34:56",
+        )
 
         assert data["ticker"] == "NVDA"
+        assert data["report_date"] == "2024-05-10"
+        assert data["generated_at"] == "2024-05-10 12:34:56"
         assert data["report_close"] == 185.25
         assert data["rating"] == "Buy"
+        assert data["action"] == "Buy"
         assert data["entry_price"] == 189.5
         assert data["stop_loss"] == 178  # 178.0 collapses to a plain int
         assert data["position_sizing"] == "6% of portfolio"
@@ -61,6 +71,9 @@ class TestBuildSummary:
         assert "data-center demand" in data["thesis"]
         assert data["final_proposal"] == "BUY"
         assert "tranches" not in data
+        # Trader didn't specify these, so they should not be emitted.
+        assert "stop_loss_basis" not in data
+        assert "avoid_above" not in data
 
     def test_report_close_omitted_when_not_provided(self):
         data = build_summary(
@@ -153,3 +166,67 @@ class TestBuildSummary:
         assert data["company"] == "Acme Corp"
         assert data["rating"] == "Overweight"
         assert data["price_target"] == 200
+
+    def test_stop_loss_basis_and_avoid_above_round_trip(self):
+        trader_md = render_trader_proposal(
+            TraderProposal(
+                action=TraderAction.BUY,
+                reasoning="Pullback into support; cap upside chase.",
+                entry_price=189.5,
+                stop_loss=178.0,
+                stop_loss_basis="entry",
+                avoid_above=205.0,
+            )
+        )
+        data = build_summary(
+            {"trader_investment_plan": trader_md}, "NVDA", report_date="2024-05-10"
+        )
+        assert data["stop_loss_basis"] == "entry"
+        assert data["avoid_above"] == 205
+
+    def test_stop_loss_basis_omitted_when_absent(self):
+        trader_md = render_trader_proposal(
+            TraderProposal(
+                action=TraderAction.BUY,
+                reasoning="Buy the dip.",
+                stop_loss=178.0,
+            )
+        )
+        data = build_summary({"trader_investment_plan": trader_md}, "NVDA")
+        assert "stop_loss_basis" not in data
+
+    def test_tranches_with_price_high_round_trip(self):
+        trader_md = render_trader_proposal(
+            TraderProposal(
+                action=TraderAction.BUY,
+                reasoning="Stage into the position across three zones.",
+                tranches=[
+                    Tranche(price=290.0, price_high=305.0, weight="10%", note="Starter"),
+                    Tranche(price=282.0, price_high=290.0, weight="40%", note="50 SMA"),
+                    Tranche(price=265.0, price_high=282.0, weight="50%", note="200 SMA"),
+                ],
+            )
+        )
+        data = build_summary({"trader_investment_plan": trader_md}, "AAPL")
+        assert data["tranches"] == [
+            {"price": 290, "price_high": 305, "weight": "10%", "note": "Starter"},
+            {"price": 282, "price_high": 290, "weight": "40%", "note": "50 SMA"},
+            {"price": 265, "price_high": 282, "weight": "50%", "note": "200 SMA"},
+        ]
+
+    def test_legacy_three_column_tranche_table_still_parses(self):
+        trader_md = (
+            "**Action**: Buy\n\n"
+            "**Reasoning**: Stage into support.\n\n"
+            "**Tranches**:\n\n"
+            "| Price | Allocation | Note |\n"
+            "| --- | --- | --- |\n"
+            "| 290 | 10% | Starter |\n"
+            "| 282 | 40% | 50 SMA |\n\n"
+            "FINAL TRANSACTION PROPOSAL: **BUY**"
+        )
+        data = build_summary({"trader_investment_plan": trader_md}, "AAPL")
+        assert data["tranches"] == [
+            {"price": 290, "weight": "10%", "note": "Starter"},
+            {"price": 282, "weight": "40%", "note": "50 SMA"},
+        ]

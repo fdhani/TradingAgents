@@ -111,7 +111,16 @@ class Tranche(BaseModel):
 
     price: Optional[float] = Field(
         default=None,
-        description="Entry price level for this tranche.",
+        description="Entry price level for this tranche (the lower bound of the buy zone).",
+    )
+    price_high: Optional[float] = Field(
+        default=None,
+        description=(
+            "Upper bound of the buy zone for this tranche, e.g. the price above "
+            "which this add no longer makes sense. Pair with `price` (the lower "
+            "bound) to express a buy range rather than a single point. Omit when "
+            "the entry is a single price."
+        ),
     )
     weight: Optional[str] = Field(
         default=None,
@@ -149,6 +158,25 @@ class TraderProposal(BaseModel):
         default=None,
         description="Optional stop-loss price in the instrument's quote currency.",
     )
+    stop_loss_basis: Optional[Literal["entry", "current", "close"]] = Field(
+        default=None,
+        description=(
+            "What the stop-loss percentage is measured from. Use `entry` when "
+            "the stop is sized off the first tranche entry (typical for staged "
+            "buys), `current` for the latest price, or `close` for the most "
+            "recent close. Omit when no stop-loss is set or when the basis is "
+            "not meaningful for this proposal."
+        ),
+    )
+    avoid_above: Optional[float] = Field(
+        default=None,
+        description=(
+            "Price ceiling above which the desk should not chase this position. "
+            "Used by the UI to render a don't-chase banner alongside the trade. "
+            "Omit when there is no such ceiling (e.g. Sell or Hold actions, or "
+            "when the entry is open-ended)."
+        ),
+    )
     position_sizing: Optional[str] = Field(
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
@@ -180,15 +208,26 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Entry Price**: {proposal.entry_price}"])
     if proposal.stop_loss is not None:
         parts.extend(["", f"**Stop Loss**: {proposal.stop_loss}"])
+    if proposal.stop_loss_basis is not None:
+        parts.extend(["", f"**Stop Loss Basis**: {proposal.stop_loss_basis}"])
+    if proposal.avoid_above is not None:
+        parts.extend(["", f"**Avoid Above**: {proposal.avoid_above}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
     if proposal.tranches:
-        parts.extend(["", "**Tranches**:", "", "| Price | Allocation | Note |", "| --- | --- | --- |"])
+        parts.extend([
+            "",
+            "**Tranches**:",
+            "",
+            "| Price | Price High | Allocation | Note |",
+            "| --- | --- | --- | --- |",
+        ])
         for t in proposal.tranches:
             price = t.price if t.price is not None else ""
+            price_high = t.price_high if t.price_high is not None else ""
             weight = t.weight or ""
             note = t.note or ""
-            parts.append(f"| {price} | {weight} | {note} |")
+            parts.append(f"| {price} | {price_high} | {weight} | {note} |")
     parts.extend([
         "",
         f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
