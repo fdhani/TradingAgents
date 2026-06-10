@@ -50,7 +50,6 @@ class TestBuildSummary:
         data = build_summary(final_state, "nvda", report_date="2024-05-10", report_close=185.25)
 
         assert data["ticker"] == "NVDA"
-        assert data["report_date"] == "2024-05-10"
         assert data["report_close"] == 185.25
         assert data["rating"] == "Buy"
         assert data["action"] == "Buy"
@@ -62,7 +61,6 @@ class TestBuildSummary:
         assert "pullback" in data["summary"]
         assert "data-center demand" in data["thesis"]
         assert data["final_proposal"] == "BUY"
-        assert "generated_at" in data
         assert "tranches" not in data
 
     def test_report_close_omitted_when_not_provided(self):
@@ -139,13 +137,6 @@ class TestBuildSummary:
         )
         assert data["ticker"] == "NVDA"
         assert "company" not in data
-
-    def test_report_date_falls_back_to_trade_date(self):
-        data = build_summary(
-            {"final_trade_decision": "Rating: Hold", "trade_date": "2023-01-02"},
-            "ABC",
-        )
-        assert data["report_date"] == "2023-01-02"
 
     def test_structured_fields_parse_correctly(self):
         pm_md = render_pm_decision(

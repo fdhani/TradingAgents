@@ -14,7 +14,6 @@ used structured output or the free-text fallback.
 
 from __future__ import annotations
 
-import datetime
 import re
 from typing import Optional, Union
 
@@ -139,9 +138,6 @@ def build_summary(
     if company and company.strip().upper() == ticker_up:
         company = None
 
-    if not report_date:
-        report_date = final_state.get("trade_date") or None
-
     # parse_rating defaults to "Hold" on empty text, so only emit a rating when
     # the Portfolio Manager actually produced a decision.
     rating = parse_rating(pm_md) if pm_md else None
@@ -172,8 +168,6 @@ def build_summary(
 
     set_if("ticker", ticker_up)
     set_if("company", company)
-    set_if("report_date", report_date)
-    data["generated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
     set_if("report_close", report_close)
     set_if("rating", rating)
     set_if("action", action)
