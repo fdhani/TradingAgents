@@ -78,14 +78,15 @@ def _final_proposal(markdown: str) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
-_TRANCHE_ROW_RE = re.compile(
-    r"^\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|",
-    re.MULTILINE,
-)
+_TRANCHE_ROW_RE = re.compile(r"^\|(.+)\|\s*$", re.MULTILINE)
 
 
 def _parse_tranches(markdown: str) -> Optional[list[dict]]:
-    """Extract tranche rows from the **Tranches**: markdown table, or None."""
+    """Extract tranche rows from the **Tranches**: markdown table, or None.
+
+    Accepts both the four-column layout (``Price | Price High | Allocation |
+    Note``) and the legacy three-column layout (``Price | Allocation | Note``).
+    """
     if not markdown:
         return None
     m = re.search(
@@ -97,16 +98,43 @@ def _parse_tranches(markdown: str) -> Optional[list[dict]]:
         return None
     block = m.group(1)
     rows = []
+    has_price_high_col: Optional[bool] = None
     for row in _TRANCHE_ROW_RE.finditer(block):
-        price_str = row.group(1).strip()
-        weight = row.group(2).strip()
-        note = row.group(3).strip()
-        if price_str.lower() in ("price", "---", "") or re.match(r"^[-\s]+$", price_str):
+        cells = [c.strip() for c in row.group(1).split("|")]
+        if not cells:
             continue
+        first = cells[0].lower()
+        if first in ("price", "---", "") or re.match(r"^[-\s]+$", cells[0]):
+            if first == "price":
+                has_price_high_col = len(cells) >= 4 and cells[1].lower() in (
+                    "price high",
+                    "pricehigh",
+                    "price_high",
+                )
+            continue
+        if has_price_high_col is None:
+            has_price_high_col = len(cells) >= 4
+        if has_price_high_col:
+            price_str, price_high_str, weight, note = (
+                cells[0],
+                cells[1] if len(cells) > 1 else "",
+                cells[2] if len(cells) > 2 else "",
+                cells[3] if len(cells) > 3 else "",
+            )
+        else:
+            price_str, price_high_str, weight, note = (
+                cells[0],
+                "",
+                cells[1] if len(cells) > 1 else "",
+                cells[2] if len(cells) > 2 else "",
+            )
         price = _num(price_str)
+        price_high = _num(price_high_str) if price_high_str else None
         entry: dict = {}
         if price is not None:
             entry["price"] = price
+        if price_high is not None:
+            entry["price_high"] = price_high
         if weight:
             entry["weight"] = weight
         if note:
@@ -121,6 +149,7 @@ def build_summary(
     ticker: str,
     report_date: Optional[str] = None,
     report_close: Optional[Union[int, float]] = None,
+    generated_at: Optional[str] = None,
 ) -> dict:
     """Build the summary dict for the sidecar JSON file.
 
@@ -145,6 +174,13 @@ def build_summary(
     action = _field(trader_md, "Action")
     entry_price = _num(_field(trader_md, "Entry Price"))
     stop_loss = _num(_field(trader_md, "Stop Loss"))
+    stop_loss_basis_raw = _field(trader_md, "Stop Loss Basis")
+    stop_loss_basis: Optional[str] = None
+    if stop_loss_basis_raw:
+        normalised = stop_loss_basis_raw.strip().lower()
+        if normalised in ("entry", "current", "close"):
+            stop_loss_basis = normalised
+    avoid_above = _num(_field(trader_md, "Avoid Above"))
     position_sizing = _field(trader_md, "Position Sizing")
 
     price_target = _num(_field(pm_md, "Price Target"))
@@ -168,10 +204,15 @@ def build_summary(
 
     set_if("ticker", ticker_up)
     set_if("company", company)
+    set_if("report_date", report_date)
+    set_if("generated_at", generated_at)
     set_if("report_close", report_close)
     set_if("rating", rating)
+    set_if("action", action)
     set_if("entry_price", entry_price)
     set_if("stop_loss", stop_loss)
+    set_if("stop_loss_basis", stop_loss_basis)
+    set_if("avoid_above", avoid_above)
     set_if("position_sizing", position_sizing)
     set_if("tranches", tranches)
     set_if("price_target", price_target)

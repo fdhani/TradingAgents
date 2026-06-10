@@ -780,18 +780,23 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path, report_date: 
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
-    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    generated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {generated_at}\n\n"
     (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
 
     # Write sidecar summary JSON alongside the report. The close price is
     # fetched best-effort: a failure must never block the report.
-    _write_summary_sidecar(final_state, ticker, report_date, save_path)
+    _write_summary_sidecar(final_state, ticker, report_date, save_path, generated_at)
 
     return save_path / "complete_report.md"
 
 
 def _write_summary_sidecar(
-    final_state: dict, ticker: str, report_date: str | None, save_path: Path
+    final_state: dict,
+    ticker: str,
+    report_date: str | None,
+    save_path: Path,
+    generated_at: str | None = None,
 ) -> None:
     """Write a ``_summary.json`` sidecar next to ``complete_report.md``."""
     import json
@@ -806,7 +811,13 @@ def _write_summary_sidecar(
     except Exception:
         pass
 
-    summary = build_summary(final_state, ticker, report_date, report_close=report_close)
+    summary = build_summary(
+        final_state,
+        ticker,
+        report_date,
+        report_close=report_close,
+        generated_at=generated_at,
+    )
     (save_path / "complete_report_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
