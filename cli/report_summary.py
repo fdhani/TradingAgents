@@ -170,7 +170,6 @@ def build_summary(
     set_if("company", company)
     set_if("report_close", report_close)
     set_if("rating", rating)
-    set_if("action", action)
     set_if("entry_price", entry_price)
     set_if("stop_loss", stop_loss)
     set_if("position_sizing", position_sizing)

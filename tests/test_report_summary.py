@@ -52,7 +52,6 @@ class TestBuildSummary:
         assert data["ticker"] == "NVDA"
         assert data["report_close"] == 185.25
         assert data["rating"] == "Buy"
-        assert data["action"] == "Buy"
         assert data["entry_price"] == 189.5
         assert data["stop_loss"] == 178  # 178.0 collapses to a plain int
         assert data["position_sizing"] == "6% of portfolio"
@@ -98,7 +97,6 @@ class TestBuildSummary:
         }
         data = build_summary(final_state, "MSFT", report_date="2024-05-10")
 
-        assert data["action"] == "Hold"
         assert data["final_proposal"] == "HOLD"
         for absent in ("entry_price", "stop_loss", "position_sizing", "price_target", "time_horizon"):
             assert absent not in data
@@ -124,7 +122,6 @@ class TestBuildSummary:
         data = build_summary(final_state, "GME", report_date="2024-05-10")
 
         assert data["rating"] == "Sell"
-        assert "action" not in data
         assert "entry_price" not in data
         assert "summary" not in data
         assert "thesis" not in data
