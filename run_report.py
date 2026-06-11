@@ -24,7 +24,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 
 # Reuse the exact report-writer the CLI uses, so output is identical.
 from cli.main import save_report_to_disk
-from tradingagents.gcs import upload_directory_to_gcs
+from tradingagents.gcs import upload_report_to_gcs
 
 
 def _log(msg: str) -> None:
@@ -86,12 +86,9 @@ def main():
     else:
         _validate_gcs(gcs_bucket)
         _log(f"[run_report] Uploading reports to GCS bucket '{gcs_bucket}'...")
-        gcs_prefix = f"{config.get('gcs_output_prefix', 'tradingagents')}/{args.ticker}/{args.date}/reports"
-        uris = upload_directory_to_gcs(save_path, gcs_bucket, gcs_prefix)
+        uris = upload_report_to_gcs(save_path, args.ticker, args.date, gcs_bucket)
         for uri in uris:
             print(f"Uploaded: {uri}")
-        if uris:
-            print(f"GCS output: gs://{gcs_bucket}/{gcs_prefix}/")
 
     _log("[run_report] Done.")
 

@@ -1,9 +1,12 @@
 """Google Cloud Storage upload utility for TradingAgents report output.
 
-Uploads a local directory tree to a GCS bucket, preserving the subdirectory
-structure relative to *local_path*. Authentication uses ADC (Application
-Default Credentials), which is automatic on Cloud Run with a service account
-that has the ``roles/storage.objectCreator`` binding on the target bucket.
+Uploads the two report files to the root of a GCS bucket using flat naming:
+  gs://{bucket}/{TICKER}_{DATE}_report.md
+  gs://{bucket}/{TICKER}_{DATE}_report_summary.json
+
+Authentication uses ADC (Application Default Credentials), which is automatic
+on Cloud Run with a service account that has the ``roles/storage.objectCreator``
+binding on the target bucket.
 """
 
 from __future__ import annotations
@@ -11,48 +14,45 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def upload_directory_to_gcs(
-    local_path: Path,
+def upload_report_to_gcs(
+    save_path: Path,
+    ticker: str,
+    report_date: str,
     bucket_name: str,
-    gcs_prefix: str,
 ) -> list[str]:
-    """Recursively upload all files under *local_path* to GCS.
+    """Upload the report and summary JSON to the root of a GCS bucket.
 
     Parameters
     ----------
-    local_path:
-        Local directory whose contents are uploaded. The directory itself is
-        not represented in GCS — only its contents, preserving subdirectory
-        structure relative to *local_path*.
+    save_path:
+        Local directory containing ``complete_report.md`` and
+        ``complete_report_summary.json``.
+    ticker:
+        Ticker symbol used to name the GCS objects (e.g. ``AAPL``).
+    report_date:
+        Analysis date in ``YYYY-MM-DD`` format.
     bucket_name:
         GCS bucket name (without ``gs://`` scheme).
-    gcs_prefix:
-        Object name prefix inside the bucket. Resulting object names are
-        ``{gcs_prefix}/{relative_file_path}``.
 
     Returns
     -------
     list[str]
-        ``gs://`` URIs for every uploaded object, in filesystem traversal
-        order. Returns an empty list when *local_path* contains no files.
+        ``gs://`` URIs for the uploaded objects.
     """
-    # Lazy import so startup cost is zero when GCS upload is disabled.
     from google.cloud import storage  # type: ignore[import-untyped]
 
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
-    prefix = gcs_prefix.rstrip("/")
-    uris: list[str] = []
+    files = {
+        save_path / "complete_report.md": f"{ticker}_{report_date}_report.md",
+        save_path / "complete_report_summary.json": f"{ticker}_{report_date}_report_summary.json",
+    }
 
-    for file_path in sorted(local_path.rglob("*")):
-        if not file_path.is_file():
-            continue
-        relative = file_path.relative_to(local_path)
-        blob_name = f"{prefix}/{relative}"
-        blob = bucket.blob(blob_name)
-        blob.upload_from_filename(str(file_path))
-        uri = f"gs://{bucket_name}/{blob_name}"
-        uris.append(uri)
+    uris: list[str] = []
+    for local_file, blob_name in files.items():
+        if local_file.exists():
+            bucket.blob(blob_name).upload_from_filename(str(local_file))
+            uris.append(f"gs://{bucket_name}/{blob_name}")
 
     return uris

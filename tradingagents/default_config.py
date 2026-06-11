@@ -57,7 +57,6 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # gs://{bucket}/{prefix}/{ticker}/{date}/reports/ after each run.
     # Authentication uses ADC — no key file needed on Cloud Run.
     "gcs_output_bucket": os.getenv("TRADINGAGENTS_GCS_BUCKET") or None,
-    "gcs_output_prefix": os.getenv("TRADINGAGENTS_GCS_PREFIX", "tradingagents"),
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.5",
