@@ -16,7 +16,7 @@ which defaults to ~/.tradingagents/logs/... (override with TRADINGAGENTS_RESULTS
 import argparse
 import sys
 import traceback
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 from pathlib import Path
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -25,6 +25,19 @@ from tradingagents.default_config import DEFAULT_CONFIG
 # Reuse the exact report-writer the CLI uses, so output is identical.
 from cli.main import save_report_to_disk
 from tradingagents.gcs import upload_report_to_gcs
+
+
+def _last_completed_trading_day() -> str:
+    """Return the most recent weekday at least one day in the past.
+
+    Starts from yesterday and walks back past weekends. This avoids using
+    today's date when the market may still be open or data is incomplete.
+    Holidays are not accounted for — yfinance handles those gracefully.
+    """
+    d = date_type.today() - timedelta(days=1)
+    while d.weekday() >= 5:  # 5=Saturday, 6=Sunday
+        d -= timedelta(days=1)
+    return d.isoformat()
 
 
 def _log(msg: str) -> None:
@@ -60,7 +73,7 @@ def main():
     args = parser.parse_args()
 
     if args.date is None:
-        args.date = date_type.today().isoformat()
+        args.date = _last_completed_trading_day()
 
     _log(f"[run_report] ticker={args.ticker} date={args.date} asset={args.asset}")
 
